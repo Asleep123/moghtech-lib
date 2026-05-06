@@ -8,30 +8,10 @@ authors = ["moghtech <contact@mogh.tech>"]
 license = "MPL-2.0"
 repository = "https://github.com/moghtech/lib"
 
-[patch.crates-io]
-# MOGH API
-mogh_auth_client = { path = "auth/client/rs" }
-mogh_auth_server = { path = "auth/server" }
-
-# MOGH
-mogh_cache = { path = "crates/cache" }
-mogh_config = { path = "crates/config" }
-mogh_encryption = { path = "crates/encryption" }
-mogh_error = { path = "crates/error" }
-mogh_logger = { path = "crates/logger" }
-mogh_pki = { path = "crates/pki" }
-mogh_rate_limit = { path = "crates/rate_limit" }
-mogh_request_ip = { path = "crates/request_ip" }
-mogh_resolver = { path = "crates/resolver" }
-mogh_resolver_derive = { path = "crates/resolver/derive" }
-mogh_secret_file = { path = "crates/secret_file" }
-mogh_server = { path = "crates/server" }
-mogh_validations = { path = "crates/validations" }
-
 [workspace.dependencies]
 # MOGH API
-mogh_auth_client = "1.3.0"
-mogh_auth_server = "1.3.0"
+mogh_auth_client = "1.5.0"
+mogh_auth_server = "1.5.0"
 
 # MOGH
 mogh_cache = "1.1.2"
@@ -52,12 +32,12 @@ mogh_validations = "1.0.1"
 cicada_loader = "0.5.1"
 
 # ASYNC
-reqwest = { version = "0.13.2", default-features = false, features = ["json", "query", "form", "rustls"] }
-tokio = { version = "1.52.1", features = ["full"] }
+reqwest = { version = "0.13.3", default-features = false, features = ["json", "query", "form", "rustls"] }
+tokio = { version = "1.52.2", features = ["full"] }
 arc-swap = "1.9.1"
 
 # SERVER
-tower-http = { version = "0.6.8", features = ["fs", "cors", "set-header"] }
+tower-http = { version = "0.6.10", features = ["fs", "cors", "set-header"] }
 axum-server = { version = "0.8.0", features = ["tls-rustls"] }
 axum = { version = "0.8.9", features = ["macros"] }
 tower-sessions = "0.15.0"
@@ -86,7 +66,7 @@ webauthn-rs = { version = "0.5.4", features = ["danger-allow-state-serialisation
 openidconnect = { version = "4.0.1", features = ["accept-rfc3339-timestamps"] }
 jsonwebtoken = { version = "10.3.0", features = ["aws_lc_rs"] }
 totp-rs = { version = "5.7.1", features = ["qr", "serde_support"] }
-bcrypt = "0.19.0"
+bcrypt = "0.19.1"
 
 # PKI
 pem-rfc7468 = { version = "1.0.0", features = ["alloc"] }
@@ -121,5 +101,25 @@ uuid = { version = "1.23.1", features = ["v4"] }
 typeshare = "1.0.5"
 wildcard = "0.3.0"
 colored = "3.1.1"
-utoipa = "5.4.0"
+utoipa = "5.5.0"
 regex = "1.12.3"
+
+[patch.crates-io]
+# MOGH API
+mogh_auth_client = { path = "auth/client/rs" }
+mogh_auth_server = { path = "auth/server" }
+
+# MOGH
+mogh_cache = { path = "crates/cache" }
+mogh_config = { path = "crates/config" }
+mogh_encryption = { path = "crates/encryption" }
+mogh_error = { path = "crates/error" }
+mogh_logger = { path = "crates/logger" }
+mogh_pki = { path = "crates/pki" }
+mogh_rate_limit = { path = "crates/rate_limit" }
+mogh_request_ip = { path = "crates/request_ip" }
+mogh_resolver = { path = "crates/resolver" }
+mogh_resolver_derive = { path = "crates/resolver/derive" }
+mogh_secret_file = { path = "crates/secret_file" }
+mogh_server = { path = "crates/server" }
+mogh_validations = { path = "crates/validations" }
