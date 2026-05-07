@@ -43,14 +43,10 @@ export function LoginPage({
 
   // Auto-redirect to OIDC provider if configured and disableAutoLogin is not set
   useEffect(() => {
-    if (
-      options?.oidc_auto_redirect &&
-      options?.oidc &&
-      !secondFactorPending
-    ) {
+    if (options?.oidc_auto_redirect && options?.oidc && !secondFactorPending) {
       const params = new URLSearchParams(location.search);
       if (!params.has("disableAutoLogin")) {
-        authClient().externalLogin("Oidc");
+        authClient().externalLogin(MoghAuth.Types.ExternalLoginProvider.Oidc);
       }
     }
   }, [options?.oidc_auto_redirect, options?.oidc, secondFactorPending]);
