@@ -1,9 +1,56 @@
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+use serde::{Deserialize, Serialize};
+
+#[derive(
+  Debug,
+  Clone,
+  Copy,
+  Default,
+  PartialEq,
+  Eq,
+  Hash,
+  Serialize,
+  Deserialize,
+)]
 pub enum StdioLogMode {
   #[default]
   Standard,
   Json,
   None,
+}
+
+/// De/serializable log level enum.
+/// Implements Into<tracing::Level>.
+#[derive(
+  Debug,
+  Clone,
+  Copy,
+  Default,
+  PartialEq,
+  Eq,
+  Hash,
+  Serialize,
+  Deserialize,
+)]
+#[serde(rename_all = "lowercase")]
+pub enum LogLevel {
+  Trace,
+  Debug,
+  #[default]
+  Info,
+  Warn,
+  Error,
+}
+
+impl From<LogLevel> for tracing::Level {
+  fn from(value: LogLevel) -> Self {
+    match value {
+      LogLevel::Trace => tracing::Level::TRACE,
+      LogLevel::Debug => tracing::Level::DEBUG,
+      LogLevel::Info => tracing::Level::INFO,
+      LogLevel::Warn => tracing::Level::WARN,
+      LogLevel::Error => tracing::Level::ERROR,
+    }
+  }
 }
 
 pub trait LogConfig {
