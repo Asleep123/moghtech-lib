@@ -70,11 +70,12 @@ bcrypt = "0.19.2"
 
 # PKI
 pem-rfc7468 = { version = "1.0.0", features = ["alloc"] }
+# Held back for 'openidconnect'
 pkcs8 = "0.10.2"
 snow = "0.10.0"
-# Held back for 'pkcs8'
+# Held back for 'openidconnect'
 spki = "0.7.3"
-# Held back for 'spki'
+# Held back for 'openidconnect'
 der = "0.7.10"
 
 # ERROR
