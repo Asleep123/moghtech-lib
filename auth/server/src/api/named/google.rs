@@ -17,7 +17,7 @@ use crate::{
   },
   provider::named::{
     STATE_PREFIX_LENGTH,
-    google::{GoogleProvider, google_provider},
+    google::{GoogleProvider, load_google_provider},
   },
   rand::random_string,
   session::Session,
@@ -49,9 +49,15 @@ pub async fn google_login<I: AuthImpl>(
       );
     }
 
-    let provider = google_provider(auth.host(), auth.path(), config)
-      .context("Google provider not available")
-      .status_code(StatusCode::UNAUTHORIZED)?;
+    let provider = load_google_provider(
+      auth.app_name(),
+      auth.host(),
+      auth.path(),
+      config,
+    )
+    .await
+    .context("Google provider not available")
+    .status_code(StatusCode::UNAUTHORIZED)?;
 
     let (state, nonce, uri) =
       provider.get_state_and_login_redirect_url(redirect).await;
@@ -87,9 +93,15 @@ pub async fn google_link<I: AuthImpl>(
     let user = auth.get_user(user_id.clone()).await?;
     auth.check_username_locked(user.username())?;
 
-    let provider = google_provider(auth.host(), auth.path(), config)
-      .context("Google provider not available")
-      .status_code(StatusCode::UNAUTHORIZED)?;
+    let provider = load_google_provider(
+      auth.app_name(),
+      auth.host(),
+      auth.path(),
+      config,
+    )
+    .await
+    .context("Google provider not available")
+    .status_code(StatusCode::UNAUTHORIZED)?;
 
     let (state, nonce, uri) =
       provider.get_state_and_login_redirect_url(None).await;
@@ -129,16 +141,22 @@ pub async fn google_callback<I: AuthImpl>(
 
     let (client_state, code) = query.open()?;
 
-    let provider = google_provider(auth.host(), auth.path(), config)
-      .context("Google provider not available")
-      .status_code(StatusCode::UNAUTHORIZED)?;
+    let provider = load_google_provider(
+      auth.app_name(),
+      auth.host(),
+      auth.path(),
+      config,
+    )
+    .await
+    .context("Google provider not available")
+    .status_code(StatusCode::UNAUTHORIZED)?;
 
     // Check first if this is a link callback
     // and use the linking handler if so.
     if let Ok(Some(info)) = session.retrieve_google_link().await {
       return link_google_callback(
         &auth,
-        provider,
+        &provider,
         info,
         client_state,
         code,
@@ -155,7 +173,7 @@ pub async fn google_callback<I: AuthImpl>(
       );
     }
 
-    let google_user = provider.get_google_user(&code, &nonce).await?;
+    let google_user = provider.get_google_user(code, nonce).await?;
     let google_id = google_user.id;
     let avatar_url = google_user.picture;
 
@@ -238,7 +256,7 @@ async fn link_google_callback<I: AuthImpl>(
     );
   }
 
-  let google_user = provider.get_google_user(&code, &nonce).await?;
+  let google_user = provider.get_google_user(code, nonce).await?;
   let google_id = google_user.id;
   let avatar_url = google_user.picture;
 

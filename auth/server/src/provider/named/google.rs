@@ -1,41 +1,61 @@
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 
 use anyhow::Context;
+use arc_swap::ArcSwapOption;
 use mogh_auth_client::config::NamedOauthConfig;
 use openidconnect::{
-  ClientId, ClientSecret, IssuerUrl, Nonce, RedirectUrl,
-  core::CoreProviderMetadata,
-  reqwest as oidc_reqwest,
+  ClientId, ClientSecret, EndpointMaybeSet, EndpointNotSet,
+  EndpointSet, IssuerUrl, Nonce, RedirectUrl,
+  core::CoreProviderMetadata, reqwest as oidc_reqwest,
 };
-use serde::Deserialize;
 use tracing::warn;
 
 use crate::{
-  provider::named::STATE_PREFIX_LENGTH,
-  rand::random_string,
+  provider::named::STATE_PREFIX_LENGTH, rand::random_string,
 };
 
-pub fn google_provider(
+fn google_provider() -> &'static ArcSwapOption<GoogleProvider> {
+  static GOOGLE_PROVIDER: OnceLock<ArcSwapOption<GoogleProvider>> =
+    OnceLock::new();
+  GOOGLE_PROVIDER.get_or_init(Default::default)
+}
+
+pub async fn load_google_provider(
+  app_user_agent: &'static str,
   host: &str,
   path: &str,
   config: &NamedOauthConfig,
-) -> Option<&'static GoogleProvider> {
-  static GOOGLE_PROVIDER: OnceLock<Option<GoogleProvider>> =
-    OnceLock::new();
-  GOOGLE_PROVIDER
-    .get_or_init(|| GoogleProvider::new(host, path, config))
-    .as_ref()
+) -> Option<Arc<GoogleProvider>> {
+  let client: Arc<_> =
+    GoogleProvider::new(app_user_agent, host, path, config)
+      .await?
+      .into();
+
+  google_provider().store(Some(client.clone()));
+
+  Some(client)
 }
 
+type GoogleOidcClient = openidconnect::core::CoreClient<
+  EndpointSet,
+  EndpointNotSet,
+  EndpointNotSet,
+  EndpointNotSet,
+  EndpointMaybeSet,
+  EndpointMaybeSet,
+>;
+
 pub struct GoogleProvider {
+  http_client: oidc_reqwest::Client,
+  oidc_client: GoogleOidcClient,
   client_id: String,
-  client_secret: String,
   redirect_uri: String,
   scopes: String,
 }
 
 impl GoogleProvider {
-  pub fn new(
+  pub async fn new(
+    app_user_agent: &'static str,
     host: &str,
     path: &str,
     NamedOauthConfig {
@@ -47,22 +67,26 @@ impl GoogleProvider {
     if !enabled {
       return None;
     }
+
     if host.is_empty() {
       warn!("Google oauth is enabled, but 'host' is not configured");
       return None;
     }
+
     if client_id.is_empty() {
       warn!(
         "Google oauth is enabled, but 'google_oauth.client_id' is not configured"
       );
       return None;
     }
+
     if client_secret.is_empty() {
       warn!(
         "Google oauth is enabled, but 'google_oauth.client_secret' is not configured"
       );
       return None;
     }
+
     let scopes = urlencoding::encode(
       &[
         "https://www.googleapis.com/auth/userinfo.profile",
@@ -71,9 +95,45 @@ impl GoogleProvider {
       .join(" "),
     )
     .to_string();
+
+    let http_client = oidc_reqwest::ClientBuilder::new()
+      .redirect(oidc_reqwest::redirect::Policy::none())
+      .user_agent(app_user_agent)
+      .build()
+      .context("Failed to build Google HTTP client")
+      .inspect_err(|e| warn!("{e:#}"))
+      .ok()?;
+
+    let issuer_url =
+      IssuerUrl::new("https://accounts.google.com".to_string())
+        .context("Failed to initialize Google issuer url")
+        .inspect_err(|e| warn!("{e:#}"))
+        .ok()?;
+
+    let provider_metadata =
+      CoreProviderMetadata::discover_async(issuer_url, &http_client)
+        .await
+        .context("Failed to discover Google OpenID configuration")
+        .inspect_err(|e| warn!("{e:#}"))
+        .ok()?;
+
+    let oidc_client =
+      openidconnect::core::CoreClient::from_provider_metadata(
+        provider_metadata,
+        ClientId::new(client_id.clone()),
+        Some(ClientSecret::new(client_secret.clone())),
+      )
+      .set_redirect_uri(
+        RedirectUrl::new(format!("{host}{path}/google/callback"))
+          .context("Invalid Google redirect URI")
+          .inspect_err(|e| warn!("{e:#}"))
+          .ok()?,
+      );
+
     GoogleProvider {
+      http_client,
+      oidc_client,
       client_id: client_id.clone(),
-      client_secret: client_secret.clone(),
       redirect_uri: format!("{host}{path}/google/callback"),
       scopes,
     }
@@ -102,38 +162,13 @@ impl GoogleProvider {
 
   pub async fn get_google_user(
     &self,
-    code: &str,
-    nonce: &str,
+    code: String,
+    nonce: String,
   ) -> anyhow::Result<GoogleUser> {
-    let http_client = oidc_reqwest::ClientBuilder::new()
-      .redirect(oidc_reqwest::redirect::Policy::none())
-      .build()
-      .context("Failed to build HTTP client")?;
-
-    let issuer_url =
-      IssuerUrl::new("https://accounts.google.com".to_string())
-        .context("Invalid Google issuer URL")?;
-
-    let provider_metadata =
-      CoreProviderMetadata::discover_async(issuer_url, &http_client)
-        .await
-        .context("Failed to discover Google OpenID configuration")?;
-
-    let client = openidconnect::core::CoreClient::from_provider_metadata(
-      provider_metadata,
-      ClientId::new(self.client_id.clone()),
-      Some(ClientSecret::new(self.client_secret.clone())),
-    )
-    .set_redirect_uri(
-      RedirectUrl::new(self.redirect_uri.clone())
-        .context("Invalid Google redirect URI")?,
-    );
-
-    let token_response = client
-      .exchange_code(openidconnect::AuthorizationCode::new(
-        code.to_string(),
-      ))?
-      .request_async(&http_client)
+    let token_response = self
+      .oidc_client
+      .exchange_code(openidconnect::AuthorizationCode::new(code))?
+      .request_async(&self.http_client)
       .await
       .context("Failed to exchange Google authorization code")?;
 
@@ -142,9 +177,9 @@ impl GoogleProvider {
       .id_token()
       .context("Google did not return an ID token")?;
 
-    let verifier = client.id_token_verifier();
+    let verifier = self.oidc_client.id_token_verifier();
     let claims = id_token
-      .claims(&verifier, &Nonce::new(nonce.to_string()))
+      .claims(&verifier, &Nonce::new(nonce))
       .context("Failed to verify Google ID token")?;
 
     Ok(GoogleUser {
@@ -162,11 +197,8 @@ impl GoogleProvider {
   }
 }
 
-#[derive(Deserialize, Clone)]
 pub struct GoogleUser {
-  #[serde(rename = "sub")]
   pub id: String,
   pub email: String,
-  #[serde(default)]
   pub picture: String,
 }
